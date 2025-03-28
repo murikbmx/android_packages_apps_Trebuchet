@@ -43,13 +43,16 @@ import android.content.res.Configuration;
 import android.hardware.display.DisplayManager;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.RemoteException;
 import android.os.Trace;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Display;
+import android.view.IWindowManager;
 import android.view.MotionEvent;
 import android.view.WindowManager;
+import android.view.WindowManagerGlobal;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -123,6 +126,9 @@ public class TaskbarManager {
 
     public static final Uri NAVIGATION_BAR_HINT = LineageSettings.System.getUriFor(
             LineageSettings.System.NAVIGATION_BAR_HINT);
+
+    public static final Uri FORCE_SHOW_NAVBAR = LineageSettings.System.getUriFor(
+            LineageSettings.System.FORCE_SHOW_NAVBAR);
 
     private final Context mWindowContext;
     private final @Nullable Context mNavigationBarPanelContext;
@@ -267,6 +273,8 @@ public class TaskbarManager {
                 .register(ENABLE_TASKBAR, mOnTaskBarChangeListener);
         SettingsCache.INSTANCE.get(mWindowContext)
                 .register(NAVIGATION_BAR_HINT, mOnTaskBarChangeListener);
+        SettingsCache.INSTANCE.get(mWindowContext)
+                .register(FORCE_SHOW_NAVBAR, mOnTaskBarChangeListener);
         Log.d(TASKBAR_NOT_DESTROYED_TAG, "registering component callbacks from constructor.");
         mWindowContext.registerComponentCallbacks(mDefaultComponentCallbacks);
         mShutdownReceiver.register(mWindowContext, Intent.ACTION_SHUTDOWN);
@@ -745,6 +753,8 @@ public class TaskbarManager {
                 .unregister(ENABLE_TASKBAR, mOnTaskBarChangeListener);
         SettingsCache.INSTANCE.get(mWindowContext)
                 .unregister(NAVIGATION_BAR_HINT, mOnTaskBarChangeListener);
+        SettingsCache.INSTANCE.get(mWindowContext)
+                .unregister(FORCE_SHOW_NAVBAR, mOnTaskBarChangeListener);
         Log.d(TASKBAR_NOT_DESTROYED_TAG, "unregistering component callbacks from destroy().");
         mWindowContext.unregisterComponentCallbacks(mDefaultComponentCallbacks);
         mShutdownReceiver.unregisterReceiverSafely(mWindowContext);
@@ -764,7 +774,19 @@ public class TaskbarManager {
         }
     }
 
+    boolean hasNavigationBar() {
+        try {
+            IWindowManager windowManager = WindowManagerGlobal.getWindowManagerService();
+            return windowManager.hasNavigationBar(Display.DEFAULT_DISPLAY);
+        } catch (RemoteException e) {
+            return true;
+        }
+    }
+
     private void addTaskbarRootViewToWindow(int displayId) {
+        if (!hasNavigationBar()) {
+            return;
+        }
         TaskbarActivityContext taskbar = getTaskbarForDisplay(displayId);
         if (enableTaskbarNoRecreate() && !mAddedWindow && taskbar != null) {
             mWindowManager.addView(getTaskbarRootLayoutForDisplay(displayId),
